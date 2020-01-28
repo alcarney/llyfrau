@@ -24,8 +24,8 @@ jobs:
     - name: Set Version Number
       shell: bash
       run : |
-        sed -i 's/"\(.*\)"/"\1b'"${BUILD_NUMBER}"'"/' arlunio/_version.py
-        cat arlunio/_version.py
+        sed -i 's/"\(.*\)"/"\1b'"${BUILD_NUMBER}"'"/' llyfrau/_version.py
+        cat llyfrau/_version.py
       if: github.ref == 'refs/heads/develop'
 
     - name: Package
