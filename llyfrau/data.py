@@ -1,76 +1,168 @@
 import pathlib
-import sqlite3
+
+from sqlalchemy import create_engine, Column, ForeignKey, Integer, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship
+
+Base = declarative_base()
 
 
-class Link:
+class DbOps:
+    """Mixin class for database operations with ORM models."""
 
-    TABLE = """\
-CREATE TABLE IF NOT EXISTS links (
-    id INTEGER PRIMARY KEY,
-    title TEXT NOT NULL,
-    url TEXT UNIQUE
-)
-"""
+    @classmethod
+    def add(cls, db, items=None, commit=True, **kwargs):
+        """Add a link or collection of links to the given database."""
 
-    INSERT = """\
-INSERT INTO links VALUES (?, ?, ?)
-"""
+        session = db.session
 
-    def __init__(self, id=None, title=None, url=None):
-        self.id = id
-        self.title = title
-        self.url = url
+        if items is None:
+            dbitem = cls(**kwargs)
+            session.add(dbitem)
+
+        elif isinstance(items[0], dict):
+            dbitems = [cls(**args) for args in items]
+            session.add_all(dbitems)
+
+        else:
+            session.add_all(items)
+
+        if commit:
+            db.commit()
+
+    @classmethod
+    def get(cls, db, id):
+        """Get a link with the given id from the database."""
+
+        session = db.session
+        item = session.query(cls).filter(cls.id == id).first()
+        db.commit()
+
+        return item
+
+    @classmethod
+    def search(cls, db):
+        """Search the given database for links."""
+
+        session = db.session
+        items = session.query(cls).all()
+        db.commit()
+
+        return items
+
+    @classmethod
+    def remove(cls, db, id):
+        """Remove the given link id from the database."""
+
+
+class Source(Base, DbOps):
+    """Represents a source that a link was imported from."""
+
+    __tablename__ = "sources"
+
+    id = Column(Integer, primary_key=True)
+    """The id of the source."""
+
+    name = Column(Text, nullable=False)
+    """The name of the source."""
+
+    prefix = Column(Text, nullable=True)
+    """The prefix that should be added to each link, if given."""
+
+    uri = Column(Text, nullable=False)
+    """The uri that was used when importing the source."""
+
+    links = relationship("Link", backref="source")
+    """Any links that were imported with this source."""
+
+    def __eq__(self, other):
+
+        if not isinstance(other, Source):
+            return False
+
+        return all(
+            [
+                self.id == other.id,
+                self.name == other.name,
+                self.prefix == other.prefix,
+                self.uri == other.uri,
+            ]
+        )
 
     def __repr__(self):
-        return f"{self.title}<{self.url}>"
+        return f"Source<{self.name}, {self.uri}>"
 
-    @classmethod
-    def query(cls):
-        return "SELECT * FROM links", tuple()
 
-    @classmethod
-    def get(cls, id):
-        return "SELECT * FROM links WHERE id=?", (id,)
+class Link(Base, DbOps):
+    """Represents an individual link."""
 
-    @classmethod
-    def from_row(cls, row):
-        return cls(id=row[0], title=row[1], url=row[2])
+    __tablename__ = "links"
 
-    def as_row(self):
-        return (self.id, self.title, self.url)
+    id = Column(Integer, primary_key=True)
+    """The id of the link."""
+
+    name = Column(Text, nullable=False)
+    """The name of the link."""
+
+    url = Column(Text, nullable=False)
+    """The url of the link."""
+
+    source_id = Column(Integer, ForeignKey("sources.id"), nullable=True)
+    """The id of the source the link was added with, if applicable"""
+
+    def __eq__(self, other):
+
+        if not isinstance(other, Link):
+            return False
+
+        return all(
+            [self.id == other.id, self.name == other.name, self.url == other.url]
+        )
+
+    def __repr__(self):
+        return f"{self.name} <{self.url}>"
 
 
 class Database:
-    def __init__(self, filepath):
+    """Manages connections to the database."""
+
+    def __init__(self, filepath, create=False, verbose=False):
+        """Parameters
+
+        :param filepath: The path to the database
+        :param create: Optional. If :code:`True` the database will be created if it
+                       doesn't already exist.
+        :param verbose: Optional. If :code:`True` enable sqlaclhemy's logging of SQL
+                        commands
+        """
+
         self.filepath = pathlib.Path(filepath)
-        self.connection = sqlite3.connect(self.filepath)
+        self.engine = create_engine("sqlite:///" + filepath, echo=verbose)
+        self.new_session = sessionmaker(bind=self.engine)
+        self._session = None
 
-    def __enter__(self):
-        return self
+        if create:
+            Source.__table__.create(bind=self.engine, checkfirst=True)
+            Link.__table__.create(bind=self.engine, checkfirst=True)
 
-    def __exit__(self, etype, err, tback):
-        self.connection.close()
+    def commit(self):
 
-    def init(self, item):
+        if self._session:
+            self._session.commit()
+            return
 
-        c = self.connection.cursor()
-        c.execute(item.TABLE)
+        raise RuntimeError("There is no session to commit!")
 
-        return c
+    @property
+    def exists(self):
+        """Determine if the database exists on disk."""
+        return self.filepath.exists()
 
-    def add(self, item):
-        """Add a new item to the db"""
-        c = self.init(item)
-        c.executemany(item.INSERT, [item.as_row()])
-        self.connection.commit()
+    @property
+    def session(self):
+        """Return the current session object."""
 
-    def query(self, query, cls):
-        """Run a query against the database."""
+        if self._session is None:
+            self._session = self.new_session()
 
-        query, params = query
-
-        c = self.init(cls)
-        c.execute(query, params)
-
-        items = [cls.from_row(r) for r in c.fetchall()]
-        return items
+        return self._session

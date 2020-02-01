@@ -1,0 +1,72 @@
+name: Python PR Build
+
+on:
+  pull_request:
+    branches:
+    - develop
+    - master
+    paths:
+    - 'llyfrau/**'
+    - 'tests/**'
+    - 'setup.py'
+    - 'pyproject.toml'
+    - 'MANIFEST.in'
+
+jobs:
+  test:
+    name: Test ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7, 3.8]
+        os: [ubuntu-latest]  # TODO: Enable windows-latest, macOS-latest
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - name: Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Setup Environment
+      run: |
+        python --version
+        python -m pip install --upgrade pip
+        python -m pip install --upgrade tox
+
+    - name: Get Version Number
+      run: |
+        build=$(echo $GITHUB_REF | sed -E 's/.*\/([0-9]+)\/.*/\1/')
+
+        echo "ref: $GITHUB_REF"
+        echo "Build number is $build"
+
+        echo "::set-env name=BUILD_NUMBER::$build"
+        echo "::set-output name=BUILD_NUMBER::$build"
+      if: matrix.python-version == '3.8'
+
+    - name: Set Version Number
+      shell: bash
+      run : |
+        sed -i 's/"\(.*\)"/"\1dev'"${BUILD_NUMBER}"'"/' llyfrau/_version.py
+        cat llyfrau/_version.py
+      if: matrix.python-version == '3.8'
+
+    - name: 'Tox: Run Tests'
+      shell: bash
+      run: |
+        tox -e py`echo ${{ matrix.python-version }} | tr -d .`
+
+    - name: 'Build Package'
+      run: |
+        tox -e pkg
+        ls dist
+      if: matrix.python-version == '3.8'
+
+    - name: 'Publish Package'
+      uses: actions/upload-artifact@v1.0.0
+      with:
+        name: 'pkg'
+        path: dist
+      if: matrix.python-version == '3.8'

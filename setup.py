@@ -14,6 +14,9 @@ def readme():
         return f.read()
 
 
+install_requires = ["sphobjinv", "sqlalchemy"]
+extras = {"dev": ["black", "flake8", "pytest", "pytest-cov", "tox",]}
+
 setup(
     name="llyfrau",
     version=info["__version__"],
@@ -29,15 +32,19 @@ setup(
     license="MIT",
     packages=find_packages(".", exclude=["tests"]),
     python_requires=">=3.6",
+    install_requires=install_requires,
+    extras_require=extras,
     classifiers=[
         "Development Status :: 3 - Alpha",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: Implementation :: CPython",
     ],
-    entry_points={"console_scripts": ["llyfr = llyfrau.__main__:main"],},
+    entry_points={
+        "console_scripts": ["llyfr = llyfrau.__main__:main"],
+        "llyfrau.importers": ["sphinx = llyfrau.importers:sphinx"],
+    },
 )

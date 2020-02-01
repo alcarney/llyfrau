@@ -1,4 +1,7 @@
+.coverage
 .env/
+.pytest_cache/
+.tox/
 __pycache__
 *.db
 *.egg-info

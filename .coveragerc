@@ -1,0 +1,6 @@
+[report]
+sort = Cover
+skip_covered = True
+exclude_lines =
+    # Don't worry too much about __repr__
+    def __repr__
