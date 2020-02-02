@@ -3,39 +3,17 @@ import inspect
 import pathlib
 import shutil
 import sys
-import webbrowser
 
 import pkg_resources
 
-from .data import Database, Link, Source
+from llyfrau._version import __version__
+from llyfrau.data import Database, Link, Source
+from .tui import LinkTable
 
 
 def add_link(filepath, url, name):
     db = Database(filepath, create=True)
     Link.add(db, name=name, url=url)
-
-
-def find_links(filepath):
-
-    path = pathlib.Path(filepath)
-
-    if not path.exists():
-        print(f"Unable to find links database: {filepath}", file=sys.stderr)
-        return -1
-
-    ids = ["ID"]
-    names = ["Name"]
-    urls = ["URL"]
-
-    db = Database(filepath)
-    links = Link.search(db)
-
-    for link in links:
-        ids.append(link.id)
-        names.append(link.name)
-        urls.append(link.url)
-
-    print(format_table([ids, names, urls]))
 
 
 def find_sources(filepath):
@@ -62,17 +40,10 @@ def find_sources(filepath):
     print(format_table([ids, names, uris, prefixes]))
 
 
-def open_link(filepath, id):
+def open_link_ui(filepath):
 
-    db = Database(filepath)
-    link = Link.get(db, id)
-
-    url = link.url
-
-    if link.source is not None and link.source.prefix is not None:
-        url = f"{link.source.prefix}{url}"
-
-    webbrowser.open(url)
+    table_ui = LinkTable(filepath)
+    table_ui.run()
 
 
 def call_command(cmd, args):
@@ -138,6 +109,7 @@ cli.add_argument(
     help="filepath to the links database",
     default="links.db",
 )
+cli.add_argument("--version", action="store_true", help="show version and exit")
 
 commands = cli.add_subparsers(title="commands")
 add = commands.add_parser("add", help="add a link")
@@ -149,22 +121,22 @@ import_ = commands.add_parser("import", help="import links from a source")
 importers = import_.add_subparsers(title="importers")
 _load_importers(importers)
 
-search = commands.add_parser("search", help="find a link")
-search.set_defaults(run=find_links)
-
 sources = commands.add_parser("sources", help="list all link sources")
 sources.set_defaults(run=find_sources)
 
 open_ = commands.add_parser("open", help="open a link")
-open_.add_argument("id", help="the id of the link")
-open_.set_defaults(run=open_link)
+open_.set_defaults(run=open_link_ui)
 
 
 def main():
 
     args = cli.parse_args()
 
+    if args.version:
+        print(f"llyfr v{__version__}")
+        return 0
+
     if hasattr(args, "run"):
-        sys.exit(call_command(args.run, args))
+        return call_command(args.run, args)
 
     cli.print_help()

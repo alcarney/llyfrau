@@ -1,4 +1,5 @@
 import pathlib
+import webbrowser
 
 from sqlalchemy import create_engine, Column, ForeignKey, Integer, Text
 from sqlalchemy.ext.declarative import declarative_base
@@ -41,14 +42,22 @@ class DbOps:
         return item
 
     @classmethod
-    def search(cls, db):
+    def search(cls, db, name=None, top=10):
         """Search the given database for links."""
 
         session = db.session
-        items = session.query(cls).all()
-        db.commit()
+        filters = []
 
-        return items
+        if name is not None:
+            filters.append(cls.name.ilike(f"%{name}%"))
+
+        if len(filters) > 0:
+            items = session.query(cls).filter(*filters)
+        else:
+            items = session.query(cls)
+
+        db.commit()
+        return items[:top]
 
     @classmethod
     def remove(cls, db, id):
@@ -121,6 +130,23 @@ class Link(Base, DbOps):
 
     def __repr__(self):
         return f"{self.name} <{self.url}>"
+
+    @property
+    def url_expanded(self):
+        """The full url, including the link's prefix if set."""
+
+        if self.source and self.source.prefix:
+            return f"{self.source.prefix}{self.url}"
+
+        return self.url
+
+    @classmethod
+    def open(cls, db, link_id):
+        """Open the link with the given id"""
+
+        link = cls.get(db, link_id)
+        url = link.url_expanded
+        webbrowser.open(url)
 
 
 class Database:

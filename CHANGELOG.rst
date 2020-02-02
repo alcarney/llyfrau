@@ -1,3 +1,12 @@
+v0.3.0
+======
+
+Features
+--------
+
+- :code:`llyfr open` now make use of a TUI powered by :code:`prompt_toolkit` to search
+  for, select and open links in the database.
+
 v0.2.0
 ======
 

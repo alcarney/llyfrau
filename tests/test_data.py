@@ -1,4 +1,6 @@
 import pytest
+import unittest.mock as mock
+
 from llyfrau.data import Database, Link, Source
 
 from sqlalchemy.exc import IntegrityError
@@ -203,3 +205,34 @@ def test_link_source_reference():
     source = Source.get(db, 1)
     assert source.links == [link]
     assert link.source == source
+
+
+def test_open_link():
+    """Ensure that we can open a link in the database"""
+
+    db = Database(":memory:", create=True)
+    Link.add(db, name="Github", url="https://www.github.com")
+
+    with mock.patch("llyfrau.data.webbrowser") as m_webbrowser:
+        Link.open(db, 1)
+
+    m_webbrowser.open.assert_called_with("https://www.github.com")
+
+
+def test_open_link_with_prefix():
+    """Ensure that we can open a link that has a prefix on its source"""
+
+    db = Database(":memory:", create=True)
+
+    Source.add(
+        db,
+        name="Numpy",
+        prefix="https://docs.scipy.org/doc/numpy/",
+        uri="sphinx://https://docs.scipy.org/doc/numpy/",
+    )
+    Link.add(db, name="Reference Guide", url="reference/", source_id=1)
+
+    with mock.patch("llyfrau.data.webbrowser") as m_webbrowser:
+        Link.open(db, 1)
+
+    m_webbrowser.open.assert_called_with("https://docs.scipy.org/doc/numpy/reference/")
