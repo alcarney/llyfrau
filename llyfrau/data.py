@@ -1,10 +1,12 @@
 import pathlib
+import logging
 import webbrowser
 
 from sqlalchemy import Column, ForeignKey, Integer, Text, create_engine, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
+logger = logging.getLogger(__name__)
 Base = declarative_base()
 
 
@@ -20,8 +22,12 @@ class Database:
         :param verbose: Optional. If :code:`True` enable sqlaclhemy's logging of SQL
                         commands
         """
-
+        logger.debug("Creating db instance for: %s", filepath)
         self.filepath = pathlib.Path(filepath)
+
+        if create and not self.filepath.parent.exists():
+            self.filepath.parent.mkdir(parents=True)
+
         self.engine = create_engine("sqlite:///" + filepath, echo=verbose)
         self.new_session = sessionmaker(bind=self.engine)
         self._session = None

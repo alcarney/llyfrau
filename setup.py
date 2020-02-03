@@ -14,7 +14,7 @@ def readme():
         return f.read()
 
 
-install_requires = ["prompt_toolkit", "sphobjinv", "sqlalchemy"]
+install_requires = ["appdirs", "prompt_toolkit", "sphobjinv", "sqlalchemy"]
 extras = {"dev": ["black", "flake8", "pytest", "pytest-cov", "tox",]}
 
 setup(

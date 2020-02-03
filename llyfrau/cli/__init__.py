@@ -1,14 +1,53 @@
 import argparse
+import collections
 import inspect
+import logging
 import pathlib
 import shutil
 import sys
 
+import appdirs
 import pkg_resources
 
 from llyfrau._version import __version__
 from llyfrau.data import Database, Link, Source
+
 from .tui import LinkTable
+
+_LogConfig = collections.namedtuple("LogConfig", "level,fmt")
+_LOG_LEVELS = [
+    _LogConfig(level=logging.INFO, fmt="%(message)s"),
+    _LogConfig(level=logging.DEBUG, fmt="[%(levelname)s]: %(message)s"),
+    _LogConfig(level=logging.DEBUG, fmt="[%(levelname)s][%(name)s]: %(message)s"),
+]
+
+
+def _setup_logging(verbose: int, quiet: bool) -> None:
+    """Setup the logging system according to the given args."""
+
+    if quiet:
+        return
+
+    verbose = 0 if verbose < 0 else verbose
+
+    try:
+        conf = _LOG_LEVELS[verbose]
+        others = False
+    except IndexError:
+        conf = _LOG_LEVELS[-1]
+        others = True
+
+    logger = logging.getLogger("llyfrau")
+    logger.setLevel(conf.level)
+
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter(conf.fmt))
+    logger.addHandler(console)
+
+    if others:
+        sql_logger = logging.getLogger("sqlalchemy")
+        sql_logger.setLevel(logging.INFO)
+        sql_logger.addHandler(console)
 
 
 def add_link(filepath, url, name):
@@ -47,6 +86,10 @@ def open_link_ui(filepath):
 
 
 def call_command(cmd, args):
+
+    if args.filepath is None:
+        base = appdirs.user_data_dir(appname="llyfr", appauthor=False)
+        args.filepath = str(pathlib.Path(base, "links.db"))
 
     params = inspect.signature(cmd).parameters
     cmd_args = {name: getattr(args, name) for name in params}
@@ -103,11 +146,17 @@ def _load_importers(parent):
 
 cli = argparse.ArgumentParser()
 cli.add_argument(
-    "-f",
-    "--filepath",
-    type=str,
-    help="filepath to the links database",
-    default="links.db",
+    "-f", "--filepath", type=str, help="filepath to the links database", default=None,
+)
+cli.add_argument(
+    "-q", "--quiet", help="disable all console output", action="store_true"
+)
+cli.add_argument(
+    "-v",
+    "--verbose",
+    action="count",
+    default=0,
+    help="increase output verbosity, repeatable e.g. -v, -vv, -vvv, ...",
 )
 cli.add_argument("--version", action="store_true", help="show version and exit")
 
@@ -135,6 +184,8 @@ def main():
     if args.version:
         print(f"llyfr v{__version__}")
         return 0
+
+    _setup_logging(args.verbose, args.quiet)
 
     if hasattr(args, "run"):
         return call_command(args.run, args)
