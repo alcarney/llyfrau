@@ -157,7 +157,7 @@ class LinkTable:
         if inpt is not None and len(inpt.text) > 0:
             name = inpt.text
 
-        links = Link.search(self.db, name=name, top=10)
+        links = Link.search(self.db, name=name, top=10, sort='visits')
 
         for idx, link in enumerate(links):
 

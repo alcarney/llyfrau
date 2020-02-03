@@ -160,6 +160,16 @@ def test_link_add_many_instances():
     assert Link.search(db) == links
 
 
+def test_link_add_default_visits():
+    """Ensure that the visits field on a link is initialised to a sane value."""
+
+    db = Database(":memory:", create=True, verbose=True)
+    Link.add(db, name="Github", url="https://github.com/")
+
+    link = Link.get(db, 1)
+    assert link.visits == 0
+
+
 def test_link_requires_name():
     """Ensure that a link requires a name before it can be added to the database"""
 
@@ -207,10 +217,10 @@ def test_link_source_reference():
     assert link.source == source
 
 
-def test_open_link():
+def test_link_open():
     """Ensure that we can open a link in the database"""
 
-    db = Database(":memory:", create=True)
+    db = Database(":memory:", create=True, verbose=True)
     Link.add(db, name="Github", url="https://www.github.com")
 
     with mock.patch("llyfrau.data.webbrowser") as m_webbrowser:
@@ -219,10 +229,10 @@ def test_open_link():
     m_webbrowser.open.assert_called_with("https://www.github.com")
 
 
-def test_open_link_with_prefix():
+def test_link_open_with_prefix():
     """Ensure that we can open a link that has a prefix on its source"""
 
-    db = Database(":memory:", create=True)
+    db = Database(":memory:", create=True, verbose=True)
 
     Source.add(
         db,
@@ -236,3 +246,113 @@ def test_open_link_with_prefix():
         Link.open(db, 1)
 
     m_webbrowser.open.assert_called_with("https://docs.scipy.org/doc/numpy/reference/")
+
+
+def test_link_open_updates_stats():
+    """Ensure that when we visit a link, its stats are updated."""
+
+    db = Database(":memory:", create=True, verbose=True)
+    Link.add(db, name="Github", url="https://www.github.com", visits=1)
+
+    with mock.patch("llyfrau.data.webbrowser") as m_webbrowser:
+        Link.open(db, 1)
+
+    m_webbrowser.open.assert_called_with("https://www.github.com")
+
+    link = Link.get(db, 1)
+    assert link.visits == 2
+
+
+def test_link_search_basic():
+    """Ensure that the simplest search just returns records in the db."""
+
+    db = Database(":memory:", create=True, verbose=True)
+    links = [Link(name=f"Link {i}", url=f"https://{i}") for i in range(20)]
+    Link.add(db, items=links)
+
+    results = Link.search(db)
+    assert len(results) == 10
+
+
+def test_link_search_top():
+    """Ensure that the number of search results can be set."""
+
+    db = Database(":memory:", create=True, verbose=True)
+    links = [Link(name=f"Link {i}", url=f"https://{i}") for i in range(20)]
+    Link.add(db, items=links)
+
+    results = Link.search(db, top=15)
+    assert len(results) == 15
+
+
+def test_link_search_large_top():
+    """Ensure that we can safely handle a page size larger than the number of
+    results."""
+
+    db = Database(":memory:", create=True, verbose=True)
+    links = [Link(name=f"Link {i}", url=f"https://{i}") for i in range(20)]
+    Link.add(db, items=links)
+
+    results = Link.search(db, top=25)
+    assert len(results) == 20
+
+
+def test_link_search_by_name():
+    """Ensure that we can filter search results by name and the search is case
+    insensitive."""
+
+    db = Database(":memory:", create=True, verbose=True)
+
+    links = [
+        Link(name="link 1", url="https://1"),
+        Link(name="LiNk 2", url="https://2"),
+        Link(name="BLINK3", url="https://3"),
+        Link(name="item 4", url="https://4"),
+        Link(name="9linkz", url="https://5")
+    ]
+
+    Link.add(db, items=links)
+    results = Link.search(db, name='link')
+
+    assert len(results) == 4
+    assert all(['link' in l.name.lower() for l in results])
+
+
+def test_link_search_by_name_returns_nothing():
+    """Ensure that if the name matches nothing then nothing is returned."""
+
+    db = Database(":memory:", create=True, verbose=True)
+
+    links = [
+        Link(name="link 1", url="https://1"),
+        Link(name="LiNk 2", url="https://2"),
+        Link(name="LINK3", url="https://3"),
+        Link(name="item 4", url="https://4")
+    ]
+
+    Link.add(db, items=links)
+    results = Link.search(db, name='kiln')
+
+    assert len(results) == 0
+
+
+def test_link_search_sort_by_visits():
+    """Ensure that we can sort results by the number of times they have been visited."""
+
+    db = Database(":memory:", create=True, verbose=True)
+
+    links = [
+        Link(name="link 1", url="https://1", visits=1),
+        Link(name="LiNk 2", url="https://2", visits=0),
+        Link(name="LINK3", url="https://3", visits=1),
+        Link(name="item 4", url="https://4", visits=2)
+    ]
+
+    Link.add(db, items=links)
+    results = Link.search(db, sort='visits')
+
+    assert results[0].url == "https://4"
+    assert results[1].url == "https://1"
+    assert results[2].url == "https://3"
+    assert results[3].url == "https://2"
+
