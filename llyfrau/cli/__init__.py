@@ -10,7 +10,7 @@ import appdirs
 import pkg_resources
 
 from llyfrau._version import __version__
-from llyfrau.data import Database, Link, Source
+from llyfrau.data import Database, Link, Source, Tag
 
 from .tui import LinkTable
 
@@ -50,9 +50,33 @@ def _setup_logging(verbose: int, quiet: bool) -> None:
         sql_logger.addHandler(console)
 
 
-def add_link(filepath, url, name):
+def add_link(filepath, url, name, tags):
     db = Database(filepath, create=True)
-    Link.add(db, name=name, url=url)
+
+    if tags is None:
+        Link.add(db, name=name, url=url)
+        return 0
+
+    link = Link(name=name, url=url)
+    new_tags = []
+
+    for t in tags:
+        existing = Tag.get(db, name=t)
+
+        if existing is not None:
+            link.tags.append(existing)
+            continue
+
+        tag = Tag(name=t)
+        link.tags.append(tag)
+        new_tags.append(tag)
+
+    Link.add(db, items=[link], commit=False)
+
+    if len(new_tags) > 0:
+        Tag.add(db, items=new_tags, commit=False)
+
+    db.commit()
 
 
 def find_sources(filepath):
@@ -164,6 +188,7 @@ commands = cli.add_subparsers(title="commands")
 add = commands.add_parser("add", help="add a link")
 add.add_argument("url", help="the link to add")
 add.add_argument("-n", "--name", help="name of the link")
+add.add_argument("-t", "--tags", nargs="*", help="tags to apply to the link")
 add.set_defaults(run=add_link)
 
 import_ = commands.add_parser("import", help="import links from a source")

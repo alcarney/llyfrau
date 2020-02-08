@@ -13,7 +13,7 @@ deps =
      pytest
      pytest-cov
 commands =
-    pytest --doctest-modules --cov=llyfrau --cov-report term {posargs}
+    pytest --tb=short --doctest-modules --cov=llyfrau --cov-report term {posargs}
 
 [testenv:pkg]
 deps =

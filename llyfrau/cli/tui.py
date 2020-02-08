@@ -56,6 +56,7 @@ class LinkTable:
         self.ids = Column("ID")
         self.names = Column("Name")
         self.sources = Column("Source")
+        self.tags = Column("Tags")
         self.urls = Column("URL")
 
         table_header = VSplit(
@@ -65,6 +66,8 @@ class LinkTable:
                 Label(self.ids.title, width=self.ids.width, style="bold"),
                 sep,
                 Label(self.names.title, width=self.names.width, style="bold"),
+                sep,
+                Label(self.tags.title, width=self.tags.width, style="bold"),
                 sep,
                 Label(self.sources.title, width=self.sources.width, style="bold"),
                 sep,
@@ -79,6 +82,8 @@ class LinkTable:
                 Window(self.ids.col, width=self.ids.width),
                 sep,
                 Window(self.names.col, width=self.names.width),
+                sep,
+                Window(self.tags.col, width=self.tags.width),
                 sep,
                 Window(self.sources.col, width=self.sources.width),
                 sep,
@@ -149,15 +154,20 @@ class LinkTable:
         self.selection.content.text = [("", CURSOR)]
         self.ids.clear()
         self.names.clear()
+        self.tags.clear()
         self.sources.clear()
         self.urls.clear()
 
         name = None
+        tags = None
 
         if inpt is not None and len(inpt.text) > 0:
-            name = inpt.text
+            terms = inpt.text.split(" ")
 
-        links = Link.search(self.db, name=name, top=10, sort='visits')
+            tags = [t.replace("#", "") for t in terms if t.startswith("#")]
+            name = " ".join(n for n in terms if not n.startswith("#"))
+
+        links = Link.search(self.db, name=name, top=10, tags=tags, sort="visits")
 
         for idx, link in enumerate(links):
 
@@ -166,6 +176,9 @@ class LinkTable:
             self.ids.col.text.append(("", f"{link.id}{newline}"))
             self.names.col.text.append(("", f"{link.name}{newline}"))
             self.urls.col.text.append(("", f"{link.url_expanded}{newline}"))
+
+            tags = ", ".join(f"#{t.name}" for t in link.tags)
+            self.tags.col.text.append(("", f"{tags}{newline}"))
 
             source = "" if not link.source else link.source.name
             self.sources.col.text.append(("", f"{source}{newline}"))
