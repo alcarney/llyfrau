@@ -1,3 +1,15 @@
+v0.3.0
+======
+
+Features
+--------
+
+- :code:`llyfr open` now make use of a TUI powered by :code:`prompt_toolkit` to search
+  for, select and open links in the database.
+- The database now records how many times a link has been opened and uses that to
+  surface the most frequently used links when searching.
+- It's now possible to tags links in the database and use them to help narrow down searches
+
 v0.2.0
 ======
 

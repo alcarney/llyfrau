@@ -89,7 +89,7 @@ def test_sphinx_import_word_url(workdir):
 def test_sphinx_import(workdir):
     """Ensure that the sphinx importer imports links correctly"""
 
-    filepath = str(pathlib.Path(workdir.name, "sphinx-importer.db"))
+    filepath = str(pathlib.Path(workdir.name, "sphinx.db"))
 
     inv = soi.Inventory()
     inv.project = "Python"
@@ -106,12 +106,12 @@ def test_sphinx_import(workdir):
     )
     inv.objects.append(
         soi.DataObjStr(
-            name="enumerate",
+            name="enumeration",
             domain="py",
             priority="1",
-            role="function",
-            uri="builtins.html#$",
-            dispname="function: Enumerate",
+            role="label",
+            uri="concepts.html#$",
+            dispname="Enumeration",
         )
     )
 
@@ -122,16 +122,16 @@ def test_sphinx_import(workdir):
 
     db = Database(filepath)
 
-    source = Source.get(db, 1)
-    assert source.name == "Python - 1.0 | Sphinx Docs"
+    source = Source.search(db, name="Python v1.0")[0]
+    assert source.name == "Python v1.0 Documentation"
     assert source.prefix == "https://docs.python.org/"
 
-    links = Link.search(db)
+    links = Link.search(db, source=source)
 
     assert links[0].name == "print"
     assert links[0].url == "builtins.html#print"
-    assert links[0].source == source
+    assert {t.name for t in links[0].tags} == {"sphinx", "py", "function"}
 
-    assert links[1].name == "function: Enumerate"
-    assert links[1].url == "builtins.html#enumerate"
-    assert links[1].source == source
+    assert links[1].name == "Enumeration"
+    assert links[1].url == "concepts.html#enumeration"
+    assert {t.name for t in links[1].tags} == {"sphinx", "py", "label"}

@@ -1,41 +1,82 @@
 import argparse
+import collections
 import inspect
+import logging
 import pathlib
 import shutil
 import sys
-import webbrowser
 
+import appdirs
 import pkg_resources
 
-from .data import Database, Link, Source
+from llyfrau._version import __version__
+from llyfrau.data import Database, Link, Source, Tag
+
+from .tui import LinkTable
+
+_LogConfig = collections.namedtuple("LogConfig", "level,fmt")
+_LOG_LEVELS = [
+    _LogConfig(level=logging.INFO, fmt="%(message)s"),
+    _LogConfig(level=logging.DEBUG, fmt="[%(levelname)s]: %(message)s"),
+    _LogConfig(level=logging.DEBUG, fmt="[%(levelname)s][%(name)s]: %(message)s"),
+]
 
 
-def add_link(filepath, url, name):
+def _setup_logging(verbose: int, quiet: bool) -> None:
+    """Setup the logging system according to the given args."""
+
+    if quiet:
+        return
+
+    verbose = 0 if verbose < 0 else verbose
+
+    try:
+        conf = _LOG_LEVELS[verbose]
+        others = False
+    except IndexError:
+        conf = _LOG_LEVELS[-1]
+        others = True
+
+    logger = logging.getLogger("llyfrau")
+    logger.setLevel(conf.level)
+
+    console = logging.StreamHandler()
+    console.setFormatter(logging.Formatter(conf.fmt))
+    logger.addHandler(console)
+
+    if others:
+        sql_logger = logging.getLogger("sqlalchemy")
+        sql_logger.setLevel(logging.INFO)
+        sql_logger.addHandler(console)
+
+
+def add_link(filepath, url, name, tags):
     db = Database(filepath, create=True)
-    Link.add(db, name=name, url=url)
 
+    if tags is None:
+        Link.add(db, name=name, url=url)
+        return 0
 
-def find_links(filepath):
+    link = Link(name=name, url=url)
+    new_tags = []
 
-    path = pathlib.Path(filepath)
+    for t in tags:
+        existing = Tag.get(db, name=t)
 
-    if not path.exists():
-        print(f"Unable to find links database: {filepath}", file=sys.stderr)
-        return -1
+        if existing is not None:
+            link.tags.append(existing)
+            continue
 
-    ids = ["ID"]
-    names = ["Name"]
-    urls = ["URL"]
+        tag = Tag(name=t)
+        link.tags.append(tag)
+        new_tags.append(tag)
 
-    db = Database(filepath)
-    links = Link.search(db)
+    Link.add(db, items=[link], commit=False)
 
-    for link in links:
-        ids.append(link.id)
-        names.append(link.name)
-        urls.append(link.url)
+    if len(new_tags) > 0:
+        Tag.add(db, items=new_tags, commit=False)
 
-    print(format_table([ids, names, urls]))
+    db.commit()
 
 
 def find_sources(filepath):
@@ -62,20 +103,17 @@ def find_sources(filepath):
     print(format_table([ids, names, uris, prefixes]))
 
 
-def open_link(filepath, id):
+def open_link_ui(filepath):
 
-    db = Database(filepath)
-    link = Link.get(db, id)
-
-    url = link.url
-
-    if link.source is not None and link.source.prefix is not None:
-        url = f"{link.source.prefix}{url}"
-
-    webbrowser.open(url)
+    table_ui = LinkTable(filepath)
+    table_ui.run()
 
 
 def call_command(cmd, args):
+
+    if args.filepath is None:
+        base = appdirs.user_data_dir(appname="llyfr", appauthor=False)
+        args.filepath = str(pathlib.Path(base, "links.db"))
 
     params = inspect.signature(cmd).parameters
     cmd_args = {name: getattr(args, name) for name in params}
@@ -132,39 +170,49 @@ def _load_importers(parent):
 
 cli = argparse.ArgumentParser()
 cli.add_argument(
-    "-f",
-    "--filepath",
-    type=str,
-    help="filepath to the links database",
-    default="links.db",
+    "-f", "--filepath", type=str, help="filepath to the links database", default=None,
 )
+cli.add_argument(
+    "-q", "--quiet", help="disable all console output", action="store_true"
+)
+cli.add_argument(
+    "-v",
+    "--verbose",
+    action="count",
+    default=0,
+    help="increase output verbosity, repeatable e.g. -v, -vv, -vvv, ...",
+)
+cli.add_argument("--version", action="store_true", help="show version and exit")
 
 commands = cli.add_subparsers(title="commands")
 add = commands.add_parser("add", help="add a link")
 add.add_argument("url", help="the link to add")
 add.add_argument("-n", "--name", help="name of the link")
+add.add_argument("-t", "--tags", nargs="*", help="tags to apply to the link")
 add.set_defaults(run=add_link)
 
 import_ = commands.add_parser("import", help="import links from a source")
 importers = import_.add_subparsers(title="importers")
 _load_importers(importers)
 
-search = commands.add_parser("search", help="find a link")
-search.set_defaults(run=find_links)
-
 sources = commands.add_parser("sources", help="list all link sources")
 sources.set_defaults(run=find_sources)
 
 open_ = commands.add_parser("open", help="open a link")
-open_.add_argument("id", help="the id of the link")
-open_.set_defaults(run=open_link)
+open_.set_defaults(run=open_link_ui)
 
 
 def main():
 
     args = cli.parse_args()
 
+    if args.version:
+        print(f"llyfr v{__version__}")
+        return 0
+
+    _setup_logging(args.verbose, args.quiet)
+
     if hasattr(args, "run"):
-        sys.exit(call_command(args.run, args))
+        return call_command(args.run, args)
 
     cli.print_help()
